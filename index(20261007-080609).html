@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task 3 — Heuristic Graph Pathfinding Agent</title>
+<style>
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:#0b1020;color:#eaf0ff;min-height:100vh
+  }
+  .wrap{max-width:1400px;margin:auto;padding:28px}
+  header{
+    padding:28px;border:1px solid #26304a;border-radius:22px;
+    background:linear-gradient(135deg,#121a31,#0e1427);
+    margin-bottom:22px
+  }
+  h1{margin:0 0 8px;font-size:clamp(28px,4vw,44px)}
+  header p{margin:0;color:#aeb9d4;line-height:1.6}
+  .controls{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;margin-top:22px
+  }
+  label{font-size:13px;color:#9faccc;display:block;margin-bottom:6px}
+  select,input,button{
+    width:100%;border:1px solid #303b59;background:#151e35;color:#fff;
+    border-radius:12px;padding:11px 12px;font:inherit
+  }
+  button{cursor:pointer;font-weight:700}
+  button:hover{filter:brightness(1.12)}
+  .primary{background:#5b5cf0;border-color:#7071ff}
+  .secondary{background:#17223b}
+  .danger{background:#351a28;border-color:#653149}
+  .layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(330px,.65fr);gap:22px}
+  .card{
+    background:#10172a;border:1px solid #26304a;border-radius:20px;padding:18px
+  }
+  .card h2{font-size:18px;margin:0 0 14px}
+  #grid{
+    width:100%;max-width:760px;margin:auto;display:grid;
+    border:2px solid #303b59;border-radius:10px;overflow:hidden;
+    background:#080d19
+  }
+  .cell{aspect-ratio:1;border-right:1px solid #1c2740;border-bottom:1px solid #1c2740;
+    display:flex;align-items:center;justify-content:center;font-size:9px;transition:.12s}
+  .cell.open{background:#10192d}
+  .cell.wall{background:#30384d}
+  .cell.start{background:#167a56;box-shadow:inset 0 0 0 2px #45e6ac}
+  .cell.goal{background:#8c3c42;box-shadow:inset 0 0 0 2px #ff8e96}
+  .cell.visited{background:#263b67}
+  .cell.path{background:#f0b73d;color:#15100a}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:15px 0 0;color:#aeb9d4;font-size:12px}
+  .dot{width:13px;height:13px;border-radius:4px;display:inline-block;margin-right:5px;vertical-align:-2px}
+  .metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .metric{padding:14px;background:#151e35;border:1px solid #27324d;border-radius:14px}
+  .metric span{display:block;color:#8997b7;font-size:12px}.metric strong{font-size:22px;display:block;margin-top:4px}
+  .status{margin:12px 0;padding:12px;border-radius:12px;background:#151e35;color:#b9c4df;font-size:13px;line-height:1.5}
+  pre{
+    margin:0;max-height:330px;overflow:auto;background:#080d19;border-radius:12px;
+    padding:14px;color:#9ee7ca;font-size:12px;line-height:1.55
+  }
+  .small{font-size:12px;color:#8794b1;line-height:1.55}
+  .bar{height:9px;background:#202a42;border-radius:20px;overflow:hidden;margin-top:7px}
+  .bar i{display:block;height:100%;width:0;background:#7778ff}
+  @media(max-width:900px){.layout{grid-template-columns:1fr}.wrap{padding:15px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Heuristic Graph Pathfinding Agent</h1>
+  <p>Task 3 implementation — compare A* Search and Dijkstra’s Algorithm on configurable grid mazes, measure search performance, and visualize path optimization.</p>
+
+  <div class="controls">
+    <div>
+      <label>Algorithm</label>
+      <select id="algorithm">
+        <option value="astar">A* Search</option>
+        <option value="dijkstra">Dijkstra's Algorithm</option>
+      </select>
+    </div>
+    <div>
+      <label>Grid Size</label>
+      <select id="size">
+        <option value="15">15 × 15</option>
+        <option value="20" selected>20 × 20</option>
+        <option value="25">25 × 25</option>
+        <option value="30">30 × 30</option>
+      </select>
+    </div>
+    <div>
+      <label>Obstacle Density: <span id="densityValue">25%</span></label>
+      <input id="density" type="range" min="5" max="45" value="25">
+    </div>
+    <div>
+      <label>Test Runs</label>
+      <select id="runs">
+        <option value="1">1 Run</option>
+        <option value="5" selected>5 Runs</option>
+        <option value="10">10 Runs</option>
+        <option value="20">20 Runs</option>
+      </select>
+    </div>
+    <div><label>&nbsp;</label><button class="secondary" id="mazeBtn">Generate Maze</button></div>
+    <div><label>&nbsp;</label><button class="primary" id="runBtn">Run Agent</button></div>
+  </div>
+</header>
+
+<div class="layout">
+  <section class="card">
+    <h2>Agent Environment</h2>
+    <div id="grid"></div>
+    <div class="legend">
+      <span><i class="dot" style="background:#167a56"></i>Start</span>
+      <span><i class="dot" style="background:#8c3c42"></i>Goal</span>
+      <span><i class="dot" style="background:#30384d"></i>Obstacle</span>
+      <span><i class="dot" style="background:#263b67"></i>Expanded</span>
+      <span><i class="dot" style="background:#f0b73d"></i>Optimized Path</span>
+    </div>
+    <div class="status" id="status">Generate a maze and run the selected search algorithm.</div>
+  </section>
+
+  <aside>
+    <section class="card">
+      <h2>Performance Metrics</h2>
+      <div class="metrics">
+        <div class="metric"><span>Path Steps</span><strong id="steps">—</strong></div>
+        <div class="metric"><span>Runtime</span><strong id="runtime">—</strong></div>
+        <div class="metric"><span>Expanded Nodes</span><strong id="expanded">—</strong></div>
+        <div class="metric"><span>Expansion Density</span><strong id="expDensity">—</strong></div>
+        <div class="metric"><span>Visited Nodes</span><strong id="visited">—</strong></div>
+        <div class="metric"><span>Success Rate</span><strong id="success">—</strong></div>
+      </div>
+      <p class="small">Expansion density = expanded nodes ÷ total traversable cells × 100.</p>
+    </section>
+
+    <section class="card" style="margin-top:22px">
+      <h2>Path Optimization</h2>
+      <div class="small">Path efficiency</div>
+      <div class="bar"><i id="effBar"></i></div>
+      <p class="small" id="effText">Waiting for a run.</p>
+    </section>
+
+    <section class="card" style="margin-top:22px">
+      <h2>Visualization Log</h2>
+      <pre id="log">[SYSTEM] Ready.</pre>
+    </section>
+  </aside>
+</div>
+</div>
+
+<script>
+"use strict";
+
+/*
+  TASK 3 — HEURISTIC GRAPH PATHFINDING AGENT SEARCH ENGINE
+
+  Algorithms implemented from scratch:
+  1. A* Search
+  2. Dijkstra's Algorithm
+
+  Metrics:
+  - Step count
+  - Runtime
+  - Expanded nodes
+  - Expanded-node density
+  - Visited nodes
+  - Success rate
+*/
+
+const $ = id => document.getElementById(id);
+let grid = [];
+let N = 20;
+let start = {r:0,c:0};
+let goal = {r:19,c:19};
+let running = false;
+
+const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+
+$("density").addEventListener("input", e => {
+  $("densityValue").textContent = e.target.value + "%";
+});
+
+function log(msg){
+  const box = $("log");
+  box.textContent += "\\n" + msg;
+  box.scrollTop = box.scrollHeight;
+}
+
+function resetLog(){
+  $("log").textContent = "[SYSTEM] Task 3 pathfinding engine initialized.";
+}
+
+function key(p){ return p.r + "," + p.c; }
+
+function same(a,b){ return a.r === b.r && a.c === b.c; }
+
+function heuristic(a,b){
+  return Math.abs(a.r-b.r) + Math.abs(a.c-b.c);
+}
+
+function inside(r,c){
+  return r >= 0 && c >= 0 && r < N && c < N;
+}
+
+function traversable(p){
+  return inside(p.r,p.c) && !grid[p.r][p.c];
+}
+
+/* Simple binary min-heap implemented from scratch. */
+class MinHeap{
+  constructor(){this.data=[];}
+  push(item){
+    this.data.push(item);
+    let i=this.data.length-1;
+    while(i>0){
+      const p=Math.floor((i-1)/2);
+      if(this.data[p].priority <= this.data[i].priority) break;
+      [this.data[p],this.data[i]]=[this.data[i],this.data[p]];
+      i=p;
+    }
+  }
+  pop(){
+    if(!this.data.length) return null;
+    const root=this.data[0];
+    const last=this.data.pop();
+    if(this.data.length){
+      this.data[0]=last;
+      let i=0;
+      while(true){
+        let l=i*2+1,r=l+1,small=i;
+        if(l<this.data.length && this.data[l].priority<this.data[small].priority) small=l;
+        if(r<this.data.length && this.data[r].priority<this.data[small].priority) small=r;
+        if(small===i) break;
+        [this.data[i],this.data[small]]=[this.data[small],this.data[i]];
+        i=small;
+      }
+    }
+    return root;
+  }
+  get size(){return this.data.length;}
+}
+
+/* Generate random obstacle maze while keeping start and goal open. */
+function generateMaze(){
+  N = Number($("size").value);
+  start = {r:0,c:0};
+  goal = {r:N-1,c:N-1};
+  const density = Number($("density").value)/100;
+
+  grid = Array.from({length:N},(_,r)=>
+    Array.from({length:N},(_,c)=>{
+      if((r===0&&c===0)||(r===N-1&&c===N-1)) return false;
+      return Math.random() < density;
+    })
+  );
+
+  // Guarantee a basic corridor from start to goal.
+  for(let c=0;c<N;c++) grid[0][c]=false;
+  for(let r=0;r<N;r++) grid[r][N-1]=false;
+
+  renderGrid();
+  resetMetrics();
+  resetLog();
+  log(`[MAZE] ${N}×${N} grid generated.`);
+  log(`[MAZE] Obstacle density target: ${Math.round(density*100)}%.`);
+}
+
+function renderGrid(visitedSet=new Set(), pathSet=new Set()){
+  const el=$("grid");
+  el.style.gridTemplateColumns=`repeat(${N},1fr)`;
+  el.innerHTML="";
+
+  for(let r=0;r<N;r++){
+    for(let c=0;c<N;c++){
+      const d=document.createElement("div");
+      d.className="cell";
+      const k=r+","+c;
+
+      if(grid[r][c]) d.classList.add("wall");
+      else if(k===key(start)) d.classList.add("start");
+      else if(k===key(goal)) d.classList.add("goal");
+      else if(pathSet.has(k)) d.classList.add("path");
+      else if(visitedSet.has(k)) d.classList.add("visited");
+      else d.classList.add("open");
+
+      el.appendChild(d);
+    }
+  }
+}
+
+function resetMetrics(){
+  ["steps","runtime","expanded","expDensity","visited","success"].forEach(id=>$(id).textContent="—");
+  $("effBar").style.width="0%";
+  $("effText").textContent="Waiting for a run.";
+  $("status").textContent="Generate a maze and run the selected search algorithm.";
+}
+
+/* Reconstruct final route using parent pointers. */
+function reconstruct(parent){
+  const path=[];
+  let cur=key(goal);
+  while(cur){
+    const [r,c]=cur.split(",").map(Number);
+    path.push({r,c});
+    if(cur===key(start)) break;
+    cur=parent[cur];
+  }
+  path.reverse();
+  return path[0] && same(path[0],start) ? path : [];
+}
+
+/* A* Search from scratch. */
+function aStar(){
+  const open=new MinHeap();
+  const g={};
+  const parent={};
+  const closed=new Set();
+  const visited=new Set();
+
+  g[key(start)]=0;
+  open.push({p:start,priority:heuristic(start,goal)});
+
+  let expanded=0;
+
+  while(open.size){
+    const current=open.pop().p;
+    const ck=key(current);
+
+    if(closed.has(ck)) continue;
+    closed.add(ck);
+    visited.add(ck);
+    expanded++;
+
+    if(same(current,goal)){
+      return {path:reconstruct(parent),expanded,visited};
+    }
+
+    for(const [dr,dc] of dirs){
+      const next={r:current.r+dr,c:current.c+dc};
+      if(!traversable(next)) continue;
+
+      const nk=key(next);
+      if(closed.has(nk)) continue;
+
+      const tentative=(g[ck] ?? Infinity)+1;
+      if(tentative < (g[nk] ?? Infinity)){
+        g[nk]=tentative;
+        parent[nk]=ck;
+        const f=tentative+heuristic(next,goal);
+        open.push({p:next,priority:f});
+      }
+    }
+  }
+
+  return {path:[],expanded,visited};
+}
+
+/* Dijkstra's Algorithm from scratch. */
+function dijkstra(){
+  const open=new MinHeap();
+  const dist={};
+  const parent={};
+  const closed=new Set();
+  const visited=new Set();
+
+  dist[key(start)]=0;
+  open.push({p:start,priority:0});
+
+  let expanded=0;
+
+  while(open.size){
+    const item=open.pop();
+    const current=item.p;
+    const ck=key(current);
+
+    if(closed.has(ck)) continue;
+    closed.add(ck);
+    visited.add(ck);
+    expanded++;
+
+    if(same(current,goal)){
+      return {path:reconstruct(parent),expanded,visited};
+    }
+
+    for(const [dr,dc] of dirs){
+      const next={r:current.r+dr,c:current.c+dc};
+      if(!traversable(next)) continue;
+
+      const nk=key(next);
+      if(closed.has(nk)) continue;
+
+      const nd=(dist[ck] ?? Infinity)+1;
+      if(nd < (dist[nk] ?? Infinity)){
+        dist[nk]=nd;
+        parent[nk]=ck;
+        open.push({p:next,priority:nd});
+      }
+    }
+  }
+
+  return {path:[],expanded,visited};
+}
+
+function animateResult(result, runtime, runNumber, totalRuns, successes){
+  const visitedArr=[...result.visited];
+  let i=0;
+
+  function step(){
+    if(i<visitedArr.length){
+      const visible=new Set(visitedArr.slice(0,i+1));
+      renderGrid(visible,new Set());
+      i++;
+      requestAnimationFrame(step);
+    }else{
+      const pathSet=new Set(result.path.map(key));
+      renderGrid(new Set(visitedArr),pathSet);
+
+      const traversableCount=N*N-grid.flat().filter(Boolean).length;
+      const density=(result.expanded/traversableCount)*100;
+      const success=result.path.length>0;
+      const steps=Math.max(0,result.path.length-1);
+
+      $("steps").textContent=success?steps:"No path";
+      $("runtime").textContent=runtime.toFixed(3)+" ms";
+      $("expanded").textContent=result.expanded;
+      $("expDensity").textContent=density.toFixed(2)+"%";
+      $("visited").textContent=result.visited.size;
+      $("success").textContent=success? "100%":"0%";
+
+      const ideal=N-1+N-1;
+      const efficiency=success ? Math.min(100,(ideal/Math.max(ideal,steps))*100) : 0;
+      $("effBar").style.width=efficiency+"%";
+      $("effText").textContent=success
+        ? `Path efficiency relative to the Manhattan lower bound: ${efficiency.toFixed(1)}%.`
+        : "The agent could not reach the target.";
+
+      $("status").textContent=success
+        ? `${$("algorithm").selectedOptions[0].text} found a route in ${steps} steps and expanded ${result.expanded} nodes.`
+        : `${$("algorithm").selectedOptions[0].text} explored ${result.expanded} nodes but found no route.`;
+
+      log(`[RUN ${runNumber}/${totalRuns}] success=${success} | steps=${steps} | expanded=${result.expanded} | runtime=${runtime.toFixed(3)}ms`);
+
+      if(runNumber===totalRuns){
+        running=false;
+        $("runBtn").disabled=false;
+        $("mazeBtn").disabled=false;
+        log(`[COMPLETE] Success rate: ${(successes/totalRuns*100).toFixed(1)}%.`);
+      }
+    }
+  }
+  step();
+}
+
+async function runAgent(){
+  if(running) return;
+  running=true;
+  $("runBtn").disabled=true;
+  $("mazeBtn").disabled=true;
+
+  const algorithm=$("algorithm").value;
+  const totalRuns=Number($("runs").value);
+  let successes=0;
+
+  resetLog();
+  log(`[AGENT] Algorithm: ${algorithm==="astar"?"A* Search":"Dijkstra's Algorithm"}`);
+  log(`[AGENT] Starting ${totalRuns} evaluation run(s)...`);
+
+  // Same maze is reused so algorithm comparison is fair.
+  for(let run=1;run<=totalRuns;run++){
+    renderGrid();
+
+    const t0=performance.now();
+    const result=algorithm==="astar" ? aStar() : dijkstra();
+    const runtime=performance.now()-t0;
+
+    if(result.path.length) successes++;
+
+    await new Promise(resolve=>{
+      animateResult(result,runtime,run,totalRuns,successes);
+      const wait=()=> running ? setTimeout(resolve,Math.min(1800,Math.max(300,result.visited.size*3))) : resolve();
+      wait();
+    });
+
+    if(run<totalRuns){
+      renderGrid();
+      await new Promise(r=>setTimeout(r,250));
+    }
+  }
+}
+
+$("mazeBtn").addEventListener("click",generateMaze);
+$("runBtn").addEventListener("click",runAgent);
+
+// Initial environment
+generateMaze();
+</script>
+</body>
+</html>
